@@ -1,0 +1,323 @@
+######Isabelle Apetroaie Thesis- CID: 02006987 ######
+
+#install packages
+
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(MASS)
+library(ggpubr)
+library(tidyverse)
+library(lme4)
+library(MuMIn)
+library(tidyverse)
+library(rstatix)
+library(ggpubr)
+library(coin)
+library(dplyr)
+
+#Set working directory 
+setwd("~/Documents/Uni/R files")
+
+
+#####Standard Curve - figure 2 #####
+rm(list=ls())
+
+#read in
+data<-read_xlsx("Standard Curve data.xlsx")
+view(data)
+
+#remove NAs
+sc<-na.omit(data)
+view(sc)
+
+
+#graph design
+x_axis_lab = c(expression(paste("2e"^"-1")),expression(paste("2")),
+               expression(paste("2"^"1")),expression(paste("2e"^"2")),
+               expression(paste("2e"^"3")),expression(paste("2e"^"4")))
+
+graph<-ggplot(sc, aes(x=Concentration, y=Cq))+
+  geom_point()+
+  geom_vline(xintercept=c(1, 2), linetype='dashed', color=c('black', 'black'))+
+  xlab("Copy number/µL") + ylab("Quantification Cycle/Cq")+
+  scale_x_discrete(labels=x_axis_lab)+
+  theme_classic()
+
+graph
+
+
+
+#annotations
+graph+
+  annotate("text", x = 1.3, y = 42, label = "LOD") +
+  annotate("text", x = 2.3, y = 25, label = "LOQ")
+
+
+
+####Figure 3 ####
+
+#clear workspace#
+rm(list=ls())
+
+#readin#
+data1<-read.csv("linearmodel.csv")
+View(data1)
+
+#select rows
+data<-data1%>%slice(-c(1:12))
+View(data)
+
+#change into numeric
+data$Concentration.Mean<-as.numeric(data$Concentration.Mean)
+class(data$Concentration.Mean)
+data$Litres<-as.numeric(data$Litres)
+data$Concentration<-as.numeric(data$Concentration)
+
+#analyse structure
+str(data)
+with(data, hist(log(Concentration))
+
+#descriptive stats
+var(data$Concentration)
+sd(data$Concentration)
+mean(data$Concentration)
+
+#outliers#
+boxplot(data$Concentration)
+
+#Normality#0's?
+hist(data$Concentration)
+data$concsqrt<-sqrt(data$Concentration)
+data$logconc<-log(data$Concentration)
+hist(data$logconc)
+view(data)
+
+data$logconc<-log(data$Concentration)
+
+#Collinearity
+cor.test(data$logconc, data$Litres)
+#VIF and drop variables?
+
+          
+#plot data
+h <- ggplot(data, aes(x=Litres, y=log(Concentration)))+
+geom_point()+
+xlab("Litres")+
+ylab(bquote(log[10](eDNA~copy~number)))+
+theme_classic()
+
+#add line of best fit
+h+geom_smooth(method="glm", formula = y~ poly(x,2), se=TRUE, colour="black")
+h
+     
+     
+#Creation of polynomial regression models
+m1<-lm(log(Concentration)~Litres,data=data)
+m1.2<-lm(log(Concentration)~poly(Litres,2), data=data) #Lowest AIC
+m1.3<-lm(log(Concentration)~poly(Litres,3), data=data)
+     
+#Comparing R2
+AIC(m1)
+AIC(m1.2)
+AIC(m1.3)
+plot(m1.2)
+summary(m1)
+summary(m1.2)
+summary(m1.3)
+     
+     
+#AIC comparison table
+summ.table <- do.call(rbind, lapply(list(m1, m1.2, m1.3), broom::glance))
+table.cols <- c("df.residual", "deviance", "AIC")
+reported.table <- summ.table[table.cols]
+names(reported.table) <- c("Resid. Df", "Resid. Dev", "AIC")
+reported.table[['dAIC']] <-  with(reported.table, AIC - min(AIC))
+reported.table[['weight']] <- with(reported.table, exp(- 0.5 * dAIC) / sum(exp(- 0.5 * dAIC)))
+reported.table$AIC <- NULL
+reported.table$weight <- round(reported.table$weight, 2)
+reported.table$dAIC <- round(reported.table$dAIC, 1)
+     
+reported.table
+     
+     
+     
+ ###  Figure 4 - Add standardised column for dna per litre
+     
+#read in data
+data1<-read.csv("linearmodel.csv")
+View(data1)
+     
+#select rows
+data<-data1%>%slice(-c(1:12))
+View(data)
+     
+#change class into numeric
+data$Concentration.Mean<-as.numeric(data$Concentration.Mean)
+class(data$Concentration.Mean)
+data$Litres<-as.numeric(data$Litres)
+data$Concentration<-as.numeric(data$Concentration)
+     
+#analyse structure
+str(data)
+with(data, hist(log(Concentration))
+data$Standardised <- data$Concentration/data$Litres
+hist(data$Standardised)
+
+#create graph
+ i <- ggplot(data, aes(x=Litres, y=log(Standardised)))+
+   geom_point()+
+   xlab("Litres")+
+   ylab(bquote(log[10](eDNA~copy~number/Litre)))+
+   theme_classic()
+i+geom_smooth(method="lm", formula = y~ poly(x,2), se=TRUE, colour="black")  
+     
+
+#Creation of models
+m2 <- lm(log(Standardised)~Litres, data = data)
+m2.1<-lm(log(Standardised)~poly(Litres,2), data=data) #Lowest AIC
+m2.2<-lm(log(Standardised)~poly(Litres,3), data=data)
+     
+#Compare R2
+summary(m2)
+summary(m2.1)
+summary(m2.2)
+     
+#Comparison of AIC table
+summ.table <- do.call(rbind, lapply(list(m2, m2.1, m2.2), broom::glance))
+table.cols <- c("df.residual", "deviance", "AIC")
+reported.table <- summ.table[table.cols]
+names(reported.table) <- c("Resid. Df", "Resid. Dev", "AIC")
+reported.table[['dAIC']] <-  with(reported.table, AIC - min(AIC))
+reported.table[['weight']] <- with(reported.table, exp(- 0.5 * dAIC) / sum(exp(- 0.5 * dAIC)))
+reported.table$AIC <- NULL
+reported.table$weight <- round(reported.table$weight, 2)
+reported.table$dAIC <- round(reported.table$dAIC, 1)
+     
+reported.table
+     
+     
+     
+     
+
+
+### Figure 5 Comparison of Near Shark samples and 0.5L surface samples
+
+     
+rm(list=ls())
+
+#readin#
+data1<-read.csv("linearmodelwill.csv")
+View(data1)
+
+#select rows
+data<-data1%>%slice(-c(13:29, 35:39))
+View(data)
+
+
+#change copy into numeric
+data$Concentration<-as.numeric(data$Concentration)
+class(data$Concentration)
+
+#descriptive stats
+var(data$Concentration)
+sd(data$Concentration)
+mean(data$Concentration)
+
+#outliers and normality
+boxplot(data$Copy.Number)
+logcopy$data<-log(data$Copy.Number)
+
+#Wilcoxon
+#Summary stats#
+data %>%
+  group_by(Sample.Name) %>%
+  get_summary_stats(Concentration, type = "mean_se")
+
+#visualise#
+bxp <- ggboxplot(data, x = "Sample.Name", y = "Concentration", xlab ="Sampling site", ylab=expression("eDNA copy number"), add = "jitter")
+bxp
+
+
+#Computation
+stat.test <- data %>% 
+  rstatix::wilcox_test(Concentration~ Sample.Name) %>%  #specify package to work
+  add_significance()
+stat.test
+
+
+#Effect size
+data%>% wilcox_effsize(Concentration~ Sample.Name)
+
+#Comparison of stats
+stat.test <- stat.test %>% add_xy_position(x = "Sample.Name")
+bxp + 
+  stat_pvalue_manual(stat.test, tip.length = 0) +
+  labs(subtitle = get_test_label(stat.test, detailed = TRUE))
+
+
+
+
+#####Figure 6-Predictive model#####
+rm(list=ls())
+
+data<-read.csv("Book1.csv")
+View(data)
+
+#Analyse data
+plot(data$Volume~data$LOD)
+plot(data$Volume~data$Indiv_CB)
+
+data$Volume<-as.numeric(data$Volume)
+class(data$Volume)
+data$Indivi_CB<-as.numeric(data$Indiv_CB)
+
+#descriptive stats
+var(data$Indiv_CB)
+sd(data$Indiv_CB)
+mean(data$Indiv_CB)
+
+#outliers#
+boxplot(data$indiv_CB)
+
+#Normality#0's?
+hist(data$Indiv_CB)
+
+
+#Collinearity
+cor.test(data$Volume, data$Indiv_CB)
+
+
+#Create Linear model
+model<-lm(log(data$Volume)~data$Indiv_CB)
+summary(model)
+
+
+# Get predictions, create grid with min and max from both, create data frame and add a column for predicted numbers
+predictData <- expand.grid(Indiv_CB = seq(10, 10000, by=10))
+predictData$predN <- predict(model, newdata=predictData, type='response')
+View(predictData)
+
+#plotting prediction lines onto plot 
+plot(Volume~Indiv_CB, data=data, log='x')
+lines(predN~Indiv_CB, data=predictData, col='red')
+
+#Create plot
+plot(Volume ~ Indiv_CB, data=data)
+
+#create predictive model
+m1 <- lm(log(Volume)~Indiv_CB, data=data)
+summary(m1)
+Indiv <- seq(1, 8000, 1)
+Volume.exponential <- exp(predict(m1,list(Indiv_CB=Indiv)))
+
+#Visualise predictive model
+plot(data$Indiv_CB, data$Volume,pch=16, xlim=c(0,8000), ylim=c(0,10),
+     xlab=expression(paste("Number of",italic(" S. squatina"))), ylab ="Volume/L")
+lines(Indiv, Volume.exponential,lwd=2, col = "red", xlab = "Time (s)", ylab = "Counts")
+  
+
+
+
+
+
